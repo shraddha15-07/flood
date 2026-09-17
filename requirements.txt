@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+networkx
+requests
+osmnx
+srtm.py
+earthengine-api
+geemap
+numpy
