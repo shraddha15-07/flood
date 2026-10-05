@@ -52,7 +52,14 @@ app.add_middleware(
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
-    """Serves the interactive Leaflet map frontend."""
+    """Serves the interactive map frontend."""
+    return FileResponse("index.html")
+
+@app.api_route("/demo", methods=["GET", "HEAD"])
+@app.api_route("/demo/index.html", methods=["GET", "HEAD"])
+def read_demo_route():
+    if os.path.exists("demo/index.html"):
+        return FileResponse("demo/index.html")
     return FileResponse("index.html")
 
 @app.get("/demo-data.json")

@@ -86,86 +86,53 @@ def load_real_graph(center_lat: float = 19.017, center_lon: float = 72.844,
     return G
 
 
-def load_cached_point_graph(cache_path: str = "demo_area_graph.graphml.gz",
-                             center_lat: float = 19.076, center_lon: float = 72.877,
-                             radius_m: int = 5000, force_refresh: bool = False):
-    """
-    Same idea as load_city_graph()'s caching, but for a small area.
-
-    Needed because some hosts (Render's free tier, notably) block
-    outbound connections to overpass-api.de — so load_real_graph()'s
-    live Overpass call fails there even for a small radius. Generate
-    the cache locally (where Overpass works) and commit the .gz file;
-    deploys then never touch the network for graph loading at all.
-    """
-    import os
-    import osmnx as ox
-
-    target_path = cache_path
-    if not os.path.exists(target_path) and os.path.exists("demo_area_graph.graphml"):
-        target_path = "demo_area_graph.graphml"
-
-    if not force_refresh and os.path.exists(target_path):
-        print(f"[graph_utils] Loading cached demo-area graph from {target_path} ...")
-        G = ox.load_graphml(target_path)
-        for _, data in G.nodes(data=True):
-            data["y"] = float(data["y"])
-            data["x"] = float(data["x"])
-            if "elevation" in data:
-                data["elevation"] = float(data["elevation"])
-        for _, _, data in G.edges(data=True):
-            if "length" in data:
-                data["length"] = float(data["length"])
-        return G
-
-    print(f"[graph_utils] Downloading demo-area graph (radius {radius_m}m) — "
-          "run this locally, not on a host that blocks Overpass...")
-    G = ox.graph_from_point((center_lat, center_lon), dist=radius_m,
-                             network_type="drive")
-    G = ox.add_edge_speeds(G)
-    G = ox.add_edge_travel_times(G)
-    attach_elevation(G)
-
-    print(f"[graph_utils] Caching graph to {cache_path} for fast reloads...")
-    ox.save_graphml(G, cache_path)
-    return G
-
-
 def load_city_graph(place_name: str = "Greater Mumbai, Maharashtra, India",
-                     cache_path: str = "mumbai_graph_cache.graphml.gz",
+                     cache_path: str = None,
                      force_refresh: bool = False):
     """
     Pulls the FULL drivable road network for Mumbai using OSMnx.
     Loads from compressed .gz cache if present.
     """
     import os
+    import tempfile
     import osmnx as ox
-    print("========== DEBUG ==========")
-    print("Current directory:", os.getcwd())
-    print("Files:", os.listdir("."))
-    print("Graph exists:", os.path.exists("mumbai_graph_cache.graphml"))
-    print("Graph gz exists:", os.path.exists("mumbai_graph_cache.graphml.gz"))
-    print("===========================")
 
-    # Check .gz path or uncompressed fallback path
+    cache_path = cache_path or os.environ.get(
+        "FLOOD_GRAPH_CACHE", "mumbai_graph_cache.graphml.gz")
     target_path = cache_path
-    if not os.path.exists(target_path) and os.path.exists("mumbai_graph_cache.graphml"):
+    if (not os.path.exists(target_path)
+            and cache_path == "mumbai_graph_cache.graphml.gz"
+            and os.path.exists("mumbai_graph_cache.graphml")):
         target_path = "mumbai_graph_cache.graphml"
 
+    if os.path.exists(target_path):
+        with open(target_path, "rb") as cache_file:
+            is_lfs_pointer = cache_file.readline().strip() == (
+                b"version https://git-lfs.github.com/spec/v1")
+        if is_lfs_pointer:
+            cache_dir = os.path.join(
+                os.environ.get("LOCALAPPDATA", tempfile.gettempdir()),
+                "FloodReroute")
+            os.makedirs(cache_dir, exist_ok=True)
+            target_path = os.path.join(cache_dir, "mumbai_graph_cache.graphml")
+
     if not force_refresh and os.path.exists(target_path):
-        print(f"[graph_utils] Loading cached Mumbai graph from {target_path} ...")
-        G = ox.load_graphml(target_path)
-        # graphml round-trips numeric attrs as strings sometimes; make sure
-        # the ones we rely on downstream are floats.
-        for _, data in G.nodes(data=True):
-            data["y"] = float(data["y"])
-            data["x"] = float(data["x"])
-            if "elevation" in data:
-                data["elevation"] = float(data["elevation"])
-        for _, _, data in G.edges(data=True):
-            if "length" in data:
-                data["length"] = float(data["length"])
-        return G
+        try:
+            print(f"[graph_utils] Loading cached Mumbai graph from {target_path} ...")
+            G = ox.load_graphml(target_path)
+            # graphml round-trips numeric attrs as strings sometimes; make sure
+            # the ones we rely on downstream are floats.
+            for _, data in G.nodes(data=True):
+                data["y"] = float(data["y"])
+                data["x"] = float(data["x"])
+                if "elevation" in data:
+                    data["elevation"] = float(data["elevation"])
+            for _, _, data in G.edges(data=True):
+                if "length" in data:
+                    data["length"] = float(data["length"])
+            return G
+        except Exception as e:
+            print(f"[graph_utils] Cached graph could not be loaded: {e}")
 
     print(f"[graph_utils] Downloading full Mumbai road network for '{place_name}' — "
           "this can take several minutes on first run...")
@@ -174,8 +141,8 @@ def load_city_graph(place_name: str = "Greater Mumbai, Maharashtra, India",
     G = ox.add_edge_travel_times(G)
     attach_elevation(G)
 
-    print(f"[graph_utils] Caching graph to {cache_path} for fast reloads...")
-    ox.save_graphml(G, cache_path)
+    print(f"[graph_utils] Caching graph to {target_path} for fast reloads...")
+    ox.save_graphml(G, target_path)
     return G
 
 
@@ -269,40 +236,17 @@ def load_demo_graph(rows: int = 8, cols: int = 8, seed: int = 42):
     return G
 
 
-def get_graph(mode: str = "demo",
-              center_lat: float = 19.017,
-              center_lon: float = 72.844,
-              radius_m: int = 1500):
-
+def get_graph(mode: str = "demo", center_lat: float = 19.017,
+              center_lon: float = 72.844, radius_m: int = 1500):
+    """
+    Single entry point for loading the graph. Always prefers loading
+    the cached Mumbai graph file if present.
+    """
     import os
-    import osmnx as ox
-
-    # Always prefer local cached graph (.gz is small and fast for Render)
-    cache_files = [
-        "mumbai_graph_cache.graphml.gz",
-        "mumbai_graph_cache.graphml"
-    ]
-
-    for cache_file in cache_files:
-        if os.path.exists(cache_file):
-            print(f"[graph_utils] Loading cached graph: {cache_file}")
-
-            G = ox.load_graphml(cache_file)
-
-            # Convert string attributes back to floats
-            for _, data in G.nodes(data=True):
-                if "y" in data:
-                    data["y"] = float(data["y"])
-                if "x" in data:
-                    data["x"] = float(data["x"])
-                if "elevation" in data:
-                    data["elevation"] = float(data["elevation"])
-
-            for _, _, data in G.edges(data=True):
-                if "length" in data:
-                    data["length"] = float(data["length"])
-
-            return G
-
-    print("[graph_utils] No cache found. Falling back to demo graph.")
+    if os.path.exists("mumbai_graph_cache.graphml.gz") or os.path.exists("mumbai_graph_cache.graphml"):
+        return load_city_graph()
+    if mode == "city":
+        return load_city_graph()
+    if mode == "small":
+        return load_real_graph(center_lat, center_lon, radius_m)
     return load_demo_graph()
