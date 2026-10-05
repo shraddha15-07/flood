@@ -24,6 +24,7 @@ from typing import Optional, List
 import requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from graph_utils import get_graph
@@ -39,7 +40,7 @@ app = FastAPI(title="FloodReroute API", version="0.3.0")
 # Lock this down before shipping. "*" would let any site drive your
 # server's CPU.
 ALLOWED_ORIGINS = os.environ.get(
-    "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000"
+    "ALLOWED_ORIGINS", "*"
 ).split(",")
 
 app.add_middleware(
@@ -48,6 +49,11 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def read_root():
+    """Serves the interactive Leaflet map frontend."""
+    return FileResponse("index.html")
 
 CITY_CENTER = (19.076, 72.877)
 FALLBACK_RAINFALL_MM_HR = 10.0
