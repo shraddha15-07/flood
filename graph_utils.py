@@ -94,8 +94,25 @@ def load_city_graph(place_name: str = "Greater Mumbai, Maharashtra, India",
     Loads from compressed .gz cache if present.
     """
     import os
+    import gzip
+    import pickle
     import tempfile
     import osmnx as ox
+
+    # Fast low-memory binary pickle load (130 MB RAM vs >600 MB for GraphML)
+    pickle_files = ["mumbai_graph_cache.pkl.gz", "mumbai_graph_full.pkl", "mumbai_graph.pkl"]
+    for pkl in pickle_files:
+        if not force_refresh and os.path.exists(pkl):
+            try:
+                print(f"[graph_utils] Loading binary pickle graph from {pkl}...")
+                if pkl.endswith(".gz"):
+                    with gzip.open(pkl, "rb") as f:
+                        return pickle.load(f)
+                else:
+                    with open(pkl, "rb") as f:
+                        return pickle.load(f)
+            except Exception as e:
+                print(f"[graph_utils] Failed loading pickle {pkl}: {e}")
 
     cache_path = cache_path or os.environ.get(
         "FLOOD_GRAPH_CACHE", "mumbai_graph_cache.graphml.gz")
@@ -243,7 +260,8 @@ def get_graph(mode: str = "demo", center_lat: float = 19.017,
     the cached Mumbai graph file if present.
     """
     import os
-    if os.path.exists("mumbai_graph_cache.graphml.gz") or os.path.exists("mumbai_graph_cache.graphml"):
+    cache_files = ["mumbai_graph_cache.pkl.gz", "mumbai_graph_full.pkl", "mumbai_graph.pkl", "mumbai_graph_cache.graphml.gz", "mumbai_graph_cache.graphml"]
+    if any(os.path.exists(f) for f in cache_files):
         return load_city_graph()
     if mode == "city":
         return load_city_graph()
