@@ -87,30 +87,23 @@ def load_real_graph(center_lat: float = 19.017, center_lon: float = 72.844,
 
 
 def load_city_graph(place_name: str = "Greater Mumbai, Maharashtra, India",
-                     cache_path: str = "mumbai_graph_cache.graphml",
+                     cache_path: str = "mumbai_graph_cache.graphml.gz",
                      force_refresh: bool = False):
     """
-    Pulls the FULL drivable road network for Mumbai using OSMnx, so any
-    address in the city can be geocoded and routed — like Uber/Google
-    Maps coverage, not just one neighborhood.
-
-    Free, no API key needed — but the FIRST run needs internet access
-    to OSM/Overpass servers and will take several minutes (Mumbai's
-    full network has tens of thousands of road segments). After that,
-    the graph is cached to disk (cache_path) and loads in seconds on
-    every restart — important since --reload restarts the process.
-
-    Install first:  pip install osmnx
-
-    Set force_refresh=True to re-download even if a cache file exists
-    (e.g. if OSM data has since been updated).
+    Pulls the FULL drivable road network for Mumbai using OSMnx.
+    Loads from compressed .gz cache if present.
     """
     import os
     import osmnx as ox
 
-    if not force_refresh and os.path.exists(cache_path):
-        print(f"[graph_utils] Loading cached Mumbai graph from {cache_path} ...")
-        G = ox.load_graphml(cache_path)
+    # Check .gz path or uncompressed fallback path
+    target_path = cache_path
+    if not os.path.exists(target_path) and os.path.exists("mumbai_graph_cache.graphml"):
+        target_path = "mumbai_graph_cache.graphml"
+
+    if not force_refresh and os.path.exists(target_path):
+        print(f"[graph_utils] Loading cached Mumbai graph from {target_path} ...")
+        G = ox.load_graphml(target_path)
         # graphml round-trips numeric attrs as strings sometimes; make sure
         # the ones we rely on downstream are floats.
         for _, data in G.nodes(data=True):
