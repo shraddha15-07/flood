@@ -99,7 +99,7 @@ def _load_node_table(path: str, label: str) -> Optional[dict]:
 
 
 print("[main] Loading road graph...")
-G = get_graph(mode="city")
+G = get_graph(mode="small", center_lat=19.076, center_lon=72.877, radius_m=5000)
 
 FLOOD_HISTORY = _load_node_table("mumbai_sar_flood_history.json",
                                  "SAR flood history")
