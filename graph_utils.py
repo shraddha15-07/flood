@@ -140,6 +140,12 @@ def load_city_graph(place_name: str = "Greater Mumbai, Maharashtra, India",
     """
     import os
     import osmnx as ox
+    print("========== DEBUG ==========")
+    print("Current directory:", os.getcwd())
+    print("Files:", os.listdir("."))
+    print("Graph exists:", os.path.exists("mumbai_graph_cache.graphml"))
+    print("Graph gz exists:", os.path.exists("mumbai_graph_cache.graphml.gz"))
+    print("===========================")
 
     # Check .gz path or uncompressed fallback path
     target_path = cache_path
@@ -263,29 +269,40 @@ def load_demo_graph(rows: int = 8, cols: int = 8, seed: int = 42):
     return G
 
 
-def get_graph(mode: str = "demo", center_lat: float = 19.017,
-              center_lon: float = 72.844, radius_m: int = 1500):
-    """
-    Single entry point for loading the graph.
+def get_graph(mode: str = "demo",
+              center_lat: float = 19.017,
+              center_lon: float = 72.844,
+              radius_m: int = 1500):
 
-    mode:
-      "demo"         -> synthetic grid, zero dependencies, fastest to run
-      "small"        -> real OSM roads for a small area, LIVE Overpass call
-                         (needs internet access to overpass-api.de — fails
-                         on hosts, like Render's free tier, that block it)
-      "small_cached" -> real OSM roads for a small area, loaded from a
-                         committed .graphml.gz cache — safe for hosts that
-                         block Overpass, since no live call is made
-      "city"         -> real OSM roads for all of Mumbai (needed for
-                         full-city address search/routing; slow first
-                         run, cached after — same Overpass-blocking risk
-                         as "small" on first run with no cache committed)
-    """
-    if mode == "city":
-        return load_city_graph()
-    if mode == "small_cached":
-        return load_cached_point_graph(center_lat=center_lat, center_lon=center_lon,
-                                        radius_m=radius_m)
-    if mode == "small":
-        return load_real_graph(center_lat, center_lon, radius_m)
+    import os
+    import osmnx as ox
+
+    # Always prefer local cached graph (.gz is small and fast for Render)
+    cache_files = [
+        "mumbai_graph_cache.graphml.gz",
+        "mumbai_graph_cache.graphml"
+    ]
+
+    for cache_file in cache_files:
+        if os.path.exists(cache_file):
+            print(f"[graph_utils] Loading cached graph: {cache_file}")
+
+            G = ox.load_graphml(cache_file)
+
+            # Convert string attributes back to floats
+            for _, data in G.nodes(data=True):
+                if "y" in data:
+                    data["y"] = float(data["y"])
+                if "x" in data:
+                    data["x"] = float(data["x"])
+                if "elevation" in data:
+                    data["elevation"] = float(data["elevation"])
+
+            for _, _, data in G.edges(data=True):
+                if "length" in data:
+                    data["length"] = float(data["length"])
+
+            return G
+
+    print("[graph_utils] No cache found. Falling back to demo graph.")
     return load_demo_graph()
