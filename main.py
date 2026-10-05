@@ -50,10 +50,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     """Serves the interactive Leaflet map frontend."""
     return FileResponse("index.html")
+
+@app.get("/demo-data.json")
+def get_demo_data():
+    """Serves demo-data.json for the frontend."""
+    if os.path.exists("demo-data.json"):
+        return FileResponse("demo-data.json")
+    elif os.path.exists("demo/demo-data.json"):
+        return FileResponse("demo/demo-data.json")
+    raise HTTPException(404, detail="demo-data.json not found")
 
 CITY_CENTER = (19.076, 72.877)
 FALLBACK_RAINFALL_MM_HR = 10.0
